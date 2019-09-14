@@ -23,7 +23,7 @@ var settings = {
         color: 0xffffff,
         intensity: 0.15
     },
-    lightHelpersEnabled: true
+    lightHelpersEnabled: false
 };
 
 function onWindowResize() {
