@@ -1,20 +1,11 @@
-var width, // window width
-    height, // window height
-    renderer,
-    scene,
-    camera,
-    moon,
-    light;
+'use strict';
 
-var settings = {
+const settings = {
     camera: {
-        angle: 45,
+        fov: 45,
+        near: 0.1,
         far: 10000,
-        position: {
-            x: 0,
-            y: 0,
-            z: 1000
-        }
+        position: { x: 0, y: 0, z: 1000 }
     },
     shadowsEnabled: true,
     backgroundColor: 0x05060d,
@@ -23,97 +14,136 @@ var settings = {
         color: 0xffffff,
         intensity: 0.15
     },
-    lightHelpersEnabled: false
+    pointLight: {
+        color: 0xffffff,
+        intensity: 1.2,
+        distance: 10000,
+        position: { x: 300, y: 300, z: 400 }
+    },
+    moon: {
+        radius: 200,
+        widthSegments: 30,
+        heightSegments: 30,
+        rotationSpeed: 0.002,
+        textureUrl: 'img/moon.jpg'
+    },
+    lightHelpersEnabled: false,
+    animateLightEnabled: false
 };
+
+let width = window.innerWidth;
+let height = window.innerHeight;
+let renderer;
+let scene;
+let camera;
+let controls;
+let moon;
+let light;
+
+function updateSizes() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+}
 
 function onWindowResize() {
     updateSizes();
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
-};
+}
 
-function updateSizes() {
-    width = window.innerWidth;
-    height = window.innerHeight;
-};
+function createCamera() {
+    const { fov, near, far, position } = settings.camera;
+    camera = new THREE.PerspectiveCamera(fov, width / height, near, far);
+    camera.position.set(position.x, position.y, position.z);
+}
+
+function createRenderer(canvas) {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setClearColor(settings.backgroundColor);
+    renderer.shadowMap.enabled = settings.shadowsEnabled;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.setSize(width, height);
+}
+
+function createAmbientLight() {
+    if (!settings.ambientLight.enabled) {
+        return;
+    }
+    const { color, intensity } = settings.ambientLight;
+    scene.add(new THREE.AmbientLight(color, intensity));
+}
 
 function createPointLight() {
-    light = new THREE.PointLight(0xffffff, 1.2, 10000);
-    light.position.set(300, 300, 400);
+    const { color, intensity, distance, position } = settings.pointLight;
+    light = new THREE.PointLight(color, intensity, distance);
+    light.position.set(position.x, position.y, position.z);
     light.castShadow = true;
     light.shadow.camera.near = 0.1;
-    light.shadow.camera.far = 10000;
+    light.shadow.camera.far = settings.camera.far;
     light.shadow.mapSize.width = width;
     light.shadow.mapSize.height = height;
     scene.add(light);
 
     if (settings.lightHelpersEnabled) {
-        var lightHelper = new THREE.PointLightHelper(light, 30);
-        scene.add(lightHelper);
+        scene.add(new THREE.PointLightHelper(light, 30));
     }
-};
+}
 
 function createMoon() {
-    var geometry = new THREE.SphereGeometry(200, 30, 30);
-    var material = new THREE.MeshLambertMaterial({
+    const { radius, widthSegments, heightSegments, textureUrl } = settings.moon;
+    const geometry = new THREE.SphereGeometry(radius, widthSegments, heightSegments);
+    const material = new THREE.MeshLambertMaterial({
         color: 0xffffff,
-        map: new THREE.TextureLoader().load("img/moon.jpg")
+        map: new THREE.TextureLoader().load(textureUrl)
     });
     moon = new THREE.Mesh(geometry, material);
     scene.add(moon);
-};
-
-function animateMoon() {
-    moon.rotation.y += 0.002;
-};
-
-function animateLight() {
-    timestamp = Date.now() * 0.0001;
-    light.position.x = Math.cos(timestamp * 5) * 1500;
-    light.position.z = Math.sin(timestamp * 5) * 1500;
-};
+}
 
 function createControls() {
-    var controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+}
+
+function animateMoon() {
+    moon.rotation.y += settings.moon.rotationSpeed;
+}
+
+function animateLight() {
+    const timestamp = Date.now() * 0.0001;
+    light.position.x = Math.cos(timestamp * 5) * 1500;
+    light.position.z = Math.sin(timestamp * 5) * 1500;
 }
 
 function init() {
     updateSizes();
-    var canvas = document.getElementById("canvas");
-    canvas.setAttribute("width", width);
-    canvas.setAttribute("height", height);
+
+    const canvas = document.getElementById('canvas');
+    canvas.setAttribute('width', width);
+    canvas.setAttribute('height', height);
+
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(settings.camera.angle, width / height, 0.1, settings.camera.far);
-    camera.position.set(settings.camera.position.x, settings.camera.position.y, settings.camera.position.z);
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-    renderer.setClearColor(settings.backgroundColor);
-    renderer.shadowMap.enabled = settings.shadowsEnabled;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(renderer.domElement);
-
-    if (settings.ambientLight.enabled) {
-        var ambientLight = new THREE.AmbientLight(settings.ambientLight.color, settings.ambientLight.intensity);
-        scene.add(ambientLight);
-    }
-
-    //var gui = new dat.GUI();
-
-    window.addEventListener('resize', onWindowResize, true);
-
+    createCamera();
+    createRenderer(canvas);
+    createAmbientLight();
     createControls();
     createMoon();
     createPointLight();
-};
+
+    window.addEventListener('resize', onWindowResize);
+}
 
 function animate() {
     requestAnimationFrame(animate);
     animateMoon();
-    //animateLight();
+    if (settings.animateLightEnabled) {
+        animateLight();
+    }
+    controls.update();
     renderer.render(scene, camera);
-};
+}
 
-window.onload = function () {
+document.addEventListener('DOMContentLoaded', () => {
     init();
     animate();
-}
+});
