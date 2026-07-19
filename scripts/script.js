@@ -39,6 +39,12 @@ const settings = {
         friction: 550,
         maxDeltaTime: 0.1
     },
+    tilt: {
+        deadZoneDegrees: 4,
+        maxAngleDegrees: 25,
+        invertForward: false,
+        invertRight: false
+    },
     lightHelpersEnabled: false,
     animateLightEnabled: false
 };
@@ -64,6 +70,10 @@ const keys = {
     ArrowLeft: false,
     ArrowRight: false
 };
+
+let tiltEnabled = false;
+let tiltBaseline = null;
+const tiltInput = { x: 0, z: 0 };
 
 function updateSizes() {
     width = window.innerWidth;
@@ -156,6 +166,55 @@ function createMoon() {
 function createControls() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableKeys = false;
+    controls.enableRotate = false;
+}
+
+function applyDeadZone(value, deadZoneDegrees, maxAngleDegrees) {
+    const magnitude = Math.abs(value);
+    if (magnitude <= deadZoneDegrees) {
+        return 0;
+    }
+    const scaled = (magnitude - deadZoneDegrees) / (maxAngleDegrees - deadZoneDegrees);
+    return Math.sign(value) * Math.min(scaled, 1);
+}
+
+function handleDeviceOrientation(event) {
+    if (event.beta === null || event.gamma === null) {
+        return;
+    }
+    if (!tiltBaseline) {
+        tiltBaseline = { beta: event.beta, gamma: event.gamma };
+    }
+
+    const { deadZoneDegrees, maxAngleDegrees, invertForward, invertRight } = settings.tilt;
+    const forwardTilt = (event.beta - tiltBaseline.beta) * (invertForward ? -1 : 1);
+    const rightTilt = (event.gamma - tiltBaseline.gamma) * (invertRight ? -1 : 1);
+
+    tiltInput.z = applyDeadZone(forwardTilt, deadZoneDegrees, maxAngleDegrees);
+    tiltInput.x = applyDeadZone(rightTilt, deadZoneDegrees, maxAngleDegrees);
+}
+
+async function enableTiltControls() {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+            const permission = await DeviceOrientationEvent.requestPermission();
+            if (permission !== 'granted') {
+                return;
+            }
+        } catch (error) {
+            return;
+        }
+    }
+
+    tiltBaseline = null;
+    tiltEnabled = true;
+    window.addEventListener('deviceorientation', handleDeviceOrientation);
+
+    const button = document.getElementById('enable-tilt');
+    if (button) {
+        button.textContent = 'Tilt controls on';
+        button.disabled = true;
+    }
 }
 
 function updateCameraAxes() {
@@ -187,9 +246,17 @@ function updatePhysics(dt) {
     if (keys.ArrowLeft) {
         moveDir.sub(cameraRight);
     }
+    if (tiltEnabled) {
+        moveDir.addScaledVector(cameraForward, tiltInput.z);
+        moveDir.addScaledVector(cameraRight, tiltInput.x);
+    }
 
     if (moveDir.lengthSq() > 0) {
-        moveDir.normalize().multiplyScalar(settings.physics.acceleration * dt);
+        const length = moveDir.length();
+        if (length > 1) {
+            moveDir.divideScalar(length);
+        }
+        moveDir.multiplyScalar(settings.physics.acceleration * dt);
         velocity.x += moveDir.x;
         velocity.z += moveDir.z;
 
@@ -246,6 +313,15 @@ function init() {
     window.addEventListener('resize', onWindowResize);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+
+    const tiltButton = document.getElementById('enable-tilt');
+    if (tiltButton) {
+        if ('DeviceOrientationEvent' in window) {
+            tiltButton.addEventListener('click', enableTiltControls);
+        } else {
+            tiltButton.style.display = 'none';
+        }
+    }
 }
 
 function animate() {
