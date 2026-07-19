@@ -55,6 +55,8 @@ let light;
 let ground;
 
 const velocity = new THREE.Vector3(0, 0, 0);
+const cameraForward = new THREE.Vector3(0, 0, -1);
+const cameraRight = new THREE.Vector3(1, 0, 0);
 
 const keys = {
     ArrowUp: false,
@@ -156,27 +158,40 @@ function createControls() {
     controls.enableKeys = false;
 }
 
+function updateCameraAxes() {
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+
+    if (forward.lengthSq() > 1e-6) {
+        forward.normalize();
+        cameraForward.copy(forward);
+        cameraRight.crossVectors(cameraForward, camera.up).normalize();
+    }
+}
+
 function updatePhysics(dt) {
     velocity.y -= settings.physics.gravity * dt;
+    updateCameraAxes();
 
-    const input = new THREE.Vector2(0, 0);
+    const moveDir = new THREE.Vector3();
     if (keys.ArrowUp) {
-        input.y -= 1;
+        moveDir.add(cameraForward);
     }
     if (keys.ArrowDown) {
-        input.y += 1;
-    }
-    if (keys.ArrowLeft) {
-        input.x -= 1;
+        moveDir.sub(cameraForward);
     }
     if (keys.ArrowRight) {
-        input.x += 1;
+        moveDir.add(cameraRight);
+    }
+    if (keys.ArrowLeft) {
+        moveDir.sub(cameraRight);
     }
 
-    if (input.lengthSq() > 0) {
-        input.normalize().multiplyScalar(settings.physics.acceleration * dt);
-        velocity.x += input.x;
-        velocity.z += input.y;
+    if (moveDir.lengthSq() > 0) {
+        moveDir.normalize().multiplyScalar(settings.physics.acceleration * dt);
+        velocity.x += moveDir.x;
+        velocity.z += moveDir.z;
 
         const speed = Math.hypot(velocity.x, velocity.z);
         if (speed > settings.physics.maxSpeed) {
